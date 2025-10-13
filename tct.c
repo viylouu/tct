@@ -96,6 +96,8 @@ typedef enum {
 
     AST_NONE,
 
+    AST_ROOT,
+
     AST_IDENT,
     AST_TYPE,
     AST_NUM,
@@ -131,6 +133,7 @@ const char* tokTypeNames[] = {
 typedef struct {
     TokType type;
     char* name;
+    Vec children;
 } Token;
 
 typedef struct {
@@ -231,6 +234,10 @@ char* openfile(const char* path) {
     return buffer;
 }
 
+Token* parse(Vec intoks, s32 i) {
+    // todo
+}
+
 int main(int argc, char** argv) {
     (void)argc;
     const char* path = argv[1];
@@ -246,6 +253,10 @@ int main(int argc, char** argv) {
         Token* tok = vec_get(&toks, i);
         printf("[%s, %s]\n", tokTypeNames[tok->type], tok->name);
     }
+
+    printf("\n");
+
+    Token* tok = parse(toks, 0);
 
     for (s32 i = 0; i < (s32)toks.len; ++i) {
         Token* tok = vec_get(&toks, i);
