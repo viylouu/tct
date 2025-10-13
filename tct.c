@@ -90,6 +90,9 @@ typedef enum {
 
     PAR_BSLASH,
 
+    PAR_LBRAC,
+    PAR_RBRAC,
+
     PAR_NEWLINE,
     PAR_EOF,
 
@@ -125,6 +128,9 @@ const char* tokTypeNames[] = {
     "QUOTE",
 
     "BSLASH",
+
+    "LBRAC",
+    "RBRAC",
 
     "NEWLINE",
     "EOF"
@@ -199,6 +205,8 @@ void lex(char* buffer) {
             easy(LPAREN, '(');
             easy(RPAREN, ')');
             easy(QUOTE, '"');
+            easy(LBRAC, '{');
+            easy(RBRAC, '}');
             easy(BSLASH, '\\');
             easy(NEWLINE, '\n');
             easy(EOF, '\0'); // not sure if this will even happen
@@ -236,6 +244,7 @@ char* openfile(const char* path) {
 
 Token* parse(Vec intoks, s32 i) {
     // todo
+    return NULL;
 }
 
 int main(int argc, char** argv) {
