@@ -94,19 +94,7 @@ typedef enum {
     PAR_RBRAC,
 
     PAR_NEWLINE,
-    PAR_EOF,
-
-
-    AST_NONE,
-
-    AST_ROOT,
-
-    AST_IDENT,
-    AST_TYPE,
-    AST_NUM,
-    AST_STRING,
-    AST_PREPROC,
-    AST_FUNC
+    PAR_EOF
 } TokType;
 
 const char* tokTypeNames[] = { 
@@ -139,8 +127,43 @@ const char* tokTypeNames[] = {
 typedef struct {
     TokType type;
     char* name;
-    Vec children;
 } Token;
+
+typedef enum {
+    AST_NONE,
+
+    AST_ROOT,
+
+    AST_PREPROC_LIB,
+
+    AST_FUNC_DEF,
+    AST_FUNC_CALL,
+
+    AST_STRING,
+
+    AST_NAME
+} ASTtype;
+
+const char* astTypeNames[] = {
+    "WHATTHEFUCK",
+
+    "ROOT",
+
+    "PREPROC-LIB",
+
+    "FUNC DEF",
+    "FUNC CALL",
+
+    "STRING",
+
+    "NAME"
+};
+
+typedef struct {
+    ASTtype type;
+    Vec children;
+    char* val;
+} ASTnode;
 
 typedef struct {
     char* buf;
@@ -242,9 +265,58 @@ char* openfile(const char* path) {
     return buffer;
 }
 
-Token* parse(Vec intoks, s32 i) {
-    // todo
-    return NULL;
+#define new \
+    (tok = vec_get(intoks, ++i))
+#define get \
+    (tok = vec_get(intoks, i))
+
+s32 parse_namespace(Vec* ns, Vec* intoks, s32 i) {
+    Token* tok = NULL;
+    while(new->type != PAR_GREAT) {
+        if (get->type != PAR_COLON)
+            vec_push(ns, get->name);
+    }
+    return i;
+}
+
+ASTnode* parse(Vec* intoks, s32 i) {
+    Vec nodes = vec_new();
+    ASTnode* node = malloc(sizeof(ASTnode));
+
+    while (i < (s32)intoks->len) {
+        s32 j = i;
+        Token* tok = vec_get(intoks, i);
+        if (tok->type == PAR_HASH) {
+            if (!strcmp(new->name, "lib")) {
+                Vec ns = vec_new();
+                i = parse_namespace(&ns, intoks, i+1);
+                ASTnode* n = malloc(sizeof(ASTnode));
+                n->children = vec_new();
+                n->type = AST_PREPROC_LIB;
+                n->val = "lib";
+                for (s32 j = 0; j < (s32)ns.len; ++j) {
+                    ASTnode* a = malloc(sizeof(ASTnode));
+                    a->children = vec_new(); // dont free ts
+                    a->type = AST_NAME;
+                    a->val = vec_get(&ns, j);
+                    vec_push(&n->children, a);
+                }
+                vec_push(&nodes, n);
+            }
+        }
+
+        if (j == i)
+            ++i;
+    }
+
+    node->children = nodes;
+    return node;
+}
+
+void print_ast(ASTnode* ast, s32 indent) {
+    printf("%*s[%s, %s]\n", indent*2,"", astTypeNames[ast->type], ast->val);
+    for (s32 i = 0; i < (s32)ast->children.len; ++i)
+        print_ast(vec_get(&ast->children, i), indent+1);
 }
 
 int main(int argc, char** argv) {
@@ -265,7 +337,11 @@ int main(int argc, char** argv) {
 
     printf("\n");
 
-    Token* tok = parse(toks, 0);
+    ASTnode* ast = parse(&toks, 0);
+    ast->type = AST_ROOT;
+    ast->val = "root";
+
+    print_ast(ast, 0);
 
     for (s32 i = 0; i < (s32)toks.len; ++i) {
         Token* tok = vec_get(&toks, i);
