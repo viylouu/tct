@@ -212,11 +212,8 @@ void lex(char* buffer) {
     }
 }
 
-int main(int argc, char** argv) {
-    (void)argc;
-    const char* path = argv[1];
-
-	FILE* file = fopen(path, "rb");
+char* openfile(const char* path) {
+    FILE* file = fopen(path, "rb");
     ERROR_IF(!file, "failed to open shader part at \"%s\"!\n", path);
 
     fseek(file, 0, SEEK_END);
@@ -231,8 +228,14 @@ int main(int argc, char** argv) {
 
     buffer[size] = '\0';
 
-    //const char* src = buffer;
+    return buffer;
+}
 
+int main(int argc, char** argv) {
+    (void)argc;
+    const char* path = argv[1];
+
+    char* buffer = openfile(path);
     printf("%s\n", buffer);
 
     toks = vec_new();
