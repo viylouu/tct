@@ -283,9 +283,11 @@ s32 parse_namespace(Vec* ns, Vec* intoks, s32 i) {
     return i;
 }
 
-ASTnode* parse(Vec* intoks, s32 i) {
+ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
     Vec nodes = vec_new();
     ASTnode* node = malloc(sizeof(ASTnode));
+
+    printf("%d/%d\n", i, (s32)intoks->len);
 
     while (i < (s32)intoks->len) {
         s32 j = i;
@@ -309,9 +311,24 @@ ASTnode* parse(Vec* intoks, s32 i) {
             }
         }
 
+        if (tok->type == PAR_LBRAC) {
+            ASTnode* n = malloc(sizeof(ASTnode));
+            n->type = AST_SCOPE;
+            n->val = "zoop scoop";
+            Vec c = vec_new();
+            while(new->type != PAR_RBRAC) {
+                printf("%d/%d\n", i, (s32)intoks->len);
+                vec_push(&c, parse(intoks, i, &i));
+            }
+            n->children = c;
+            vec_push(&nodes, n);
+        }
+
         if (j == i)
             ++i;
     }
+
+    *oi = i;
 
     node->children = nodes;
     return node;
@@ -341,7 +358,8 @@ int main(int argc, char** argv) {
 
     printf("\n");
 
-    ASTnode* ast = parse(&toks, 0);
+    s32 fuck;
+    ASTnode* ast = parse(&toks, 0, &fuck);
     ast->type = AST_ROOT;
     ast->val = "root";
 
