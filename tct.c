@@ -162,31 +162,7 @@ void sb_free(StringBuilder* sb) {
 
 Vec toks;
 
-int main(int argc, char** argv) {
-    (void)argc;
-    const char* path = argv[1];
-
-	FILE* file = fopen(path, "rb");
-    ERROR_IF(!file, "failed to open shader part at \"%s\"!\n", path);
-
-    fseek(file, 0, SEEK_END);
-    s64 size = ftell(file);
-    rewind(file);
-
-    char* buffer = (char*)malloc(size + 1);
-    ERROR_IF(!buffer, "failed to alloc size for shader part at \"%s\"", path);
-
-    fread(buffer, 1, size, file);
-    fclose(file);
-
-    buffer[size] = '\0';
-
-    //const char* src = buffer;
-
-    printf("%s\n", buffer);
-
-    toks = vec_new();
-
+void lex(char* buffer) {
     for (s32 i = 0; buffer[i] != '\0'; ++i) {
         // if your file isnt like ascii or something then idgaf
         u32 it = 0;
@@ -234,6 +210,34 @@ int main(int argc, char** argv) {
         else
             free(tok);
     }
+}
+
+int main(int argc, char** argv) {
+    (void)argc;
+    const char* path = argv[1];
+
+	FILE* file = fopen(path, "rb");
+    ERROR_IF(!file, "failed to open shader part at \"%s\"!\n", path);
+
+    fseek(file, 0, SEEK_END);
+    s64 size = ftell(file);
+    rewind(file);
+
+    char* buffer = (char*)malloc(size + 1);
+    ERROR_IF(!buffer, "failed to alloc size for shader part at \"%s\"", path);
+
+    fread(buffer, 1, size, file);
+    fclose(file);
+
+    buffer[size] = '\0';
+
+    //const char* src = buffer;
+
+    printf("%s\n", buffer);
+
+    toks = vec_new();
+
+    lex(buffer);
 
     for (s32 i = 0; i < (s32)toks.len; ++i) {
         Token* tok = vec_get(&toks, i);
