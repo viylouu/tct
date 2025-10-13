@@ -1,0 +1,5 @@
+#lib <std::io>
+
+main void() {
+	io::printf("hello world\n")
+}
