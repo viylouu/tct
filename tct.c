@@ -139,6 +139,8 @@ typedef enum {
     AST_FUNC_DEF,
     AST_FUNC_CALL,
 
+    AST_SCOPE,
+
     AST_STRING,
 
     AST_NAME
@@ -153,6 +155,8 @@ const char* astTypeNames[] = {
 
     "FUNC DEF",
     "FUNC CALL",
+
+    "SCOPE",
 
     "STRING",
 
