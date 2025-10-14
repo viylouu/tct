@@ -545,16 +545,16 @@ ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
                         i = child_i;
                         consume("params");
 
-                        /*child_i = 0;
+                        child_i = 0;
                         ASTnode* scope = parse(intoks, i, &child_i);
                         scope->val = "zoop scope";
                         scope->type = AST_SCOPE;
-                        vec_push(&n->children, scope);*/
+                        vec_push(&n->children, scope);
                         /*for (s32 c = 0; c < (s32)scope->children.len; ++c) {
                             void* cc = vec_get(&scope->children, c);
                             vec_push(&n->children, cc);
                         }*/
-                        //i = child_i;
+                        i = child_i;
                         consume("scope");
 
                         vec_push(&nodes, n);
