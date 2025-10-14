@@ -137,13 +137,15 @@ typedef enum {
     AST_PREPROC_LIB,
 
     AST_FUNC_DEF,
+    AST_FUNC_DEF_PARAMS,
     AST_FUNC_CALL,
 
     AST_SCOPE,
 
     AST_STRING,
 
-    AST_NAME
+    AST_NAME,
+    AST_TYPE
 } ASTtype;
 
 const char* astTypeNames[] = {
@@ -154,13 +156,15 @@ const char* astTypeNames[] = {
     "PREPROC-LIB",
 
     "FUNC DEF",
+    "FUNC DEF - PARAMS",
     "FUNC CALL",
 
     "SCOPE",
 
     "STRING",
 
-    "NAME"
+    "NAME",
+    "TYPE"
 };
 
 typedef struct {
@@ -346,6 +350,8 @@ ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
     ++i
 #define next() \
     ++i
+#define nextngo() \
+    i+1
 #define cur() \
     tok_at(intoks, i)
 #define expect_type(at, t, ...) \
@@ -445,6 +451,62 @@ ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
 
             vec_push(&nodes, scope);
             continue;
+        }
+
+        if (tok->type == PAR_NAME) {
+            Token* nex = tok_at(intoks, nextngo());
+            Token* after;
+            switch(nex->type) {
+                case PAR_NAME:
+                    after = tok_at(intoks, i+2);
+                    if (after->type == PAR_LPAREN) {
+                        ASTnode* n = malloc(sizeof(ASTnode));
+                        n->children = vec_new();
+                        n->type = AST_FUNC_DEF;
+                        n->val = "weeeeeee";
+
+                        ASTnode* name = malloc(sizeof(ASTnode));
+                        name->val = cur()->name;
+                        name->type = AST_NAME;
+                        name->children = vec_new();
+                        vec_push(&n->children, name);
+                        consume("name");
+
+                        ASTnode* type = malloc(sizeof(ASTnode));
+                        type->val = cur()->name;
+                        type->type = AST_TYPE;
+                        type->children = vec_new();
+                        vec_push(&n->children, type);
+                        consume("type");
+
+                        /* todo: impl () stuff */
+                        s32 child_i = 0;
+                        /*
+                        ASTnode* params = parse(intoks, i, &child_i);
+                        params->val = "";
+                        params->type = AST_FUNC_DEF_PARAMS;
+                        vec_push(&n->children, params);
+                        i = child_i;
+                        consume("params");
+                        */
+
+                        child_i = 0;
+                        ASTnode* scope = parse(intoks, i, &child_i);
+                        scope->val = "zoop scope";
+                        scope->type = AST_SCOPE;
+                        for (s32 c = 0; c < (s32)scope->children.len; ++c) {
+                            void* cc = vec_get(&scope->children, c);
+                            vec_push(&n->children, cc);
+                        }
+                        i = child_i;
+                        consume("scope");
+
+                        vec_push(&nodes, n);
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
 
         if (start_i == i)
