@@ -140,7 +140,10 @@ typedef enum {
     AST_FUNC_DEF_PARAMS,
     AST_FUNC_CALL,
 
+    AST_VAR_DEF,
+
     AST_SCOPE,
+    AST_GROUPING,
 
     AST_STRING,
 
@@ -159,7 +162,10 @@ const char* astTypeNames[] = {
     "FUNC DEF - PARAMS",
     "FUNC CALL",
 
+    "VAR DEF",
+
     "SCOPE",
+    "GROUPING",
 
     "STRING",
 
@@ -453,13 +459,65 @@ ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
             continue;
         }
 
+        if (tok->type == PAR_LPAREN) {
+            consume("(");
+
+            ASTnode* group = malloc(sizeof(ASTnode));
+            group->type = AST_GROUPING;
+            group->val = "groop";
+            group->children= vec_new();
+
+            while(in_range(intoks, i)) {
+                if (cur()->type == PAR_RPAREN) {
+                    consume(")");
+                    break;
+                }
+
+                s32 child_i = 0;
+                ASTnode* child = parse(intoks, i, &child_i);
+                for (s32 c = 0; c < (s32)child->children.len; ++c) {
+                    void* cc = vec_get(&child->children, c);
+                    vec_push(&group->children, cc);
+                }
+                i = child_i;
+            }
+
+            vec_push(&nodes, group);
+            continue;
+        }
+
         if (tok->type == PAR_NAME) {
             Token* nex = tok_at(intoks, nextngo());
             Token* after;
             switch(nex->type) {
                 case PAR_NAME:
                     after = tok_at(intoks, i+2);
-                    if (after->type == PAR_LPAREN) {
+                    if (after->type != PAR_LPAREN) {
+                        // todo: add that
+                        /*if (after->type == PAR_EQUALS) {
+                        } else {*/
+                            ASTnode* n = malloc(sizeof(ASTnode));
+                            n->children = vec_new();
+                            n->type = AST_VAR_DEF;
+                            n->val = "vardef";
+
+                            ASTnode* name = malloc(sizeof(ASTnode));
+                            name->val = cur()->name;
+                            name->type = AST_NAME;
+                            name->children = vec_new();
+                            vec_push(&n->children, name);
+                            consume("name");
+
+                            ASTnode* type = malloc(sizeof(ASTnode));
+                            type->val = cur()->name;
+                            type->type = AST_TYPE;
+                            type->children = vec_new();
+                            vec_push(&n->children, type);
+                            consume("type");
+
+                            vec_push(&nodes, n);
+                        //}
+                    } else {
                         ASTnode* n = malloc(sizeof(ASTnode));
                         n->children = vec_new();
                         n->type = AST_FUNC_DEF;
@@ -479,26 +537,24 @@ ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
                         vec_push(&n->children, type);
                         consume("type");
 
-                        /* todo: impl () stuff */
                         s32 child_i = 0;
-                        /*
                         ASTnode* params = parse(intoks, i, &child_i);
                         params->val = "";
                         params->type = AST_FUNC_DEF_PARAMS;
                         vec_push(&n->children, params);
                         i = child_i;
                         consume("params");
-                        */
 
-                        child_i = 0;
+                        /*child_i = 0;
                         ASTnode* scope = parse(intoks, i, &child_i);
                         scope->val = "zoop scope";
                         scope->type = AST_SCOPE;
-                        for (s32 c = 0; c < (s32)scope->children.len; ++c) {
+                        vec_push(&n->children, scope);*/
+                        /*for (s32 c = 0; c < (s32)scope->children.len; ++c) {
                             void* cc = vec_get(&scope->children, c);
                             vec_push(&n->children, cc);
-                        }
-                        i = child_i;
+                        }*/
+                        //i = child_i;
                         consume("scope");
 
                         vec_push(&nodes, n);
@@ -511,6 +567,12 @@ ASTnode* parse(Vec* intoks, s32 i, s32* oi) {
 
         if (start_i == i)
             next();
+
+        if (!in_range(intoks, i))
+            break;
+
+        if (cur()->type == PAR_RPAREN || cur()->type == PAR_RBRAC)
+            break;
     }
 
     *oi = i;

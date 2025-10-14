@@ -1,7 +1,9 @@
 #lib <std::io>
 
-main void() {
+main void(abc a) {
 	io::printf("hello world\n")
-    {}a{a{a}}{a
-    a}}
+}
+
+test ahh() {
+    boo boo
 }
