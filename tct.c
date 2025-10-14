@@ -82,6 +82,7 @@ typedef enum {
     PAR_GREAT,
 
     PAR_COLON,
+    PAR_SEMI,
 
     PAR_LPAREN,
     PAR_RPAREN,
@@ -109,6 +110,7 @@ const char* tokTypeNames[] = {
     "GREAT",
 
     "COLON",
+    "SEMICOLON",
 
     "LPAREN",
     "RPAREN",
@@ -244,6 +246,7 @@ void lex(char* buffer) {
             easy(QUOTE, '"');
             easy(LBRAC, '{');
             easy(RBRAC, '}');
+            easy(SEMI, ';');
             easy(BSLASH, '\\');
             easy(NEWLINE, '\n');
             easy(EOF, '\0'); // not sure if this will even happen
@@ -279,233 +282,86 @@ char* openfile(const char* path) {
     return buffer;
 }
 
-#define consume(t) do { \
-        if (in_range(intoks, i)) \
-            expect_type(cur(), t, "expected " #t "!\n"); \
-        else \
-            printf("index oob trying to consume \"%s\"! (line %d)\n", tokTypeNames[t], __LINE__); \
-        next(); \
-    } while(0)
-#define next() \
-    ++i
-#define nextngo() \
-    i+1
-#define cur() \
-    tok_at(intoks, i)
-#define expect_type(at, t, ...) \
-    ERROR_IF(at->type != t, __VA_ARGS__)
+typedef struct {
+    Vec* toks;
+    s32 pos;
+} Parser;
 
-static int in_range(Vec* intoks, s32 i) {
-    return i < (s32)intoks->len;
+Token* cur(Parser* p) { return vec_get(p->toks, p->pos); }
+Token* next(Parser* p) { return vec_get(p->toks, ++p->pos); }
+b8 at_end(Parser* p) { return p->pos >= (s32)p->toks->len; }
+
+b8 match(Parser* p, TokType type) {
+    if (cur(p)->type == type) { next(p); return 1; }
+    return 0;
 }
 
-static Token* tok_at(Vec* intoks, s32 i) {
-    ERROR_IF(i >= (s32)intoks->len, "index %d oob! (len=%zu)\n", i, intoks->len);
-    return (Token*)vec_get(intoks, i);
+void expect(Parser* p, TokType type, const char* msg) {
+    ERROR_IF(cur(p)->type != type, msg);
 }
 
-// i should be token after '<'
-s32 parse_namespace(Vec* ns, Vec* intoks, s32 i) {
-    Token* tok = NULL;
+ASTnode* make_node(ASTtype type, char* val) {
+    ASTnode* n = malloc(sizeof(ASTnode));
+    n->type = type;
+    n->val = val;
+    n->children = vec_new();
+    return n;
+}
 
-    while (in_range(intoks, i)) {
-        tok = tok_at(intoks, i);
-        if (tok->type == PAR_GREAT) {
-            consume(PAR_GREAT);
-            return i;
+ASTnode* parse_expression(Parser* p);
+ASTnode* parse_group(Parser* p);
+ASTnode* parse_scope(Parser* p);
+ASTnode* parse_function(Parser* p);
+ASTnode* parse_preproc(Parser* p);
+
+ASTnode* parse_statement(Parser* p) {
+    Token* t = cur(p);
+    
+    if (t->type == PAR_NAME) {
+        Token* name = t;
+        next(p);
+
+        if (cur(p)->type == PAR_NAME) {
+            Token* type = cur(p);
+            next(p);
+            ASTnode* var = make_node(AST_VAR_DEF, "vardef");
+
+            vec_push(&var->children, make_node(AST_NAME, name->name));
+            vec_push(&var->children, make_node(AST_NAME, type->name));
+
+            if (match(p, PAR_SEMI)) return var;
+            if (match(p, PAR_NEWLINE)) return var;
         }
 
-        if (tok->type != PAR_COLON)
-            vec_push(ns, tok->name);
-
-        next();
+        if (cur(p)->type == PAR_LPAREN) {
+            --p->pos;
+            return parse_function(p);
+        }
     }
 
-    ERROR_IF(1, "missing closing > in import!\n");
-    return i;
+    if (t->type == PAR_LBRAC)
+        return parse_scope(p);
+
+    if (t->type == PAR_NUM || t->type == PAR_LPAREN)
+        return parse_expression(p);
+
+    if (t->type == PAR_HASH)
+        return parse_preproc(p);
+
+    if (t->type == PAR_SEMI || t->type == PAR_NEWLINE)
+        return parse_statement(p);
+
+    ERROR_IF(1, "unexpected token in statement!\n");
+    return NULL;
 }
 
-ASTnode* parse(Vec* intoks, s32 i, s32* oi, TokType endtype) {
-    Vec nodes = vec_new();
-    ASTnode* node = malloc(sizeof(ASTnode));
-    node->type = AST_NONE;
-    node->val = NULL;
-    node->children = vec_new();
-
-    while (i < (s32)intoks->len) {
-        s32 start_i = i;
-        Token* tok = tok_at(intoks, i);
-
-        if (tok->type == endtype)
-            break;
-
-        if (tok->type == PAR_HASH) {
-            next();
-            Token* nex = tok_at(intoks, i);
-            if (nex->type == PAR_NAME && !strcmp(nex->name, "lib")) {
-                consume(PAR_NAME); // lib
-                expect_type(cur(), PAR_LESS, "expected < after lib!\n");
-
-                Vec ns = vec_new();
-                i = parse_namespace(&ns, intoks, next());
-                ASTnode* n = malloc(sizeof(ASTnode));
-                n->children = vec_new();
-                n->type = AST_PREPROC_LIB;
-                n->val = "lib";
-                for (s32 k = 0; k < (s32)ns.len; ++k) {
-                    ASTnode* a = malloc(sizeof(ASTnode));
-                    a->children = vec_new();
-                    a->type = AST_NAME;
-                    a->val = vec_get(&ns, k);
-                    vec_push(&n->children, a);
-                }
-                vec_free(&ns);
-                vec_push(&nodes, n);
-                continue;
-            } else {
-                ERROR_IF(1, "unexpected preprocessor %s!\n", nex->name);
-            }
-        } else if (tok->type == PAR_LBRAC) {
-            consume(PAR_LBRAC);
-
-            ASTnode* scope = malloc(sizeof(ASTnode));
-            scope->type = AST_SCOPE;
-            scope->val = "zoop scope";
-            scope->children= vec_new();
-
-            while(in_range(intoks, i)) {
-                if (cur()->type == PAR_RBRAC) {
-                    consume(PAR_RBRAC);
-                    break;
-                }
-
-                s32 child_i = 0;
-                ASTnode* child = parse(intoks, i, &child_i, PAR_RBRAC);
-                for (s32 c = 0; c < (s32)child->children.len; ++c) {
-                    void* cc = vec_get(&child->children, c);
-                    vec_push(&scope->children, cc);
-                }
-                //vec_push(&scope->children, child);
-                i = child_i;
-            }
-
-            vec_push(&nodes, scope);
-            continue;
-        } else if (tok->type == PAR_LPAREN) {
-            consume(PAR_LPAREN);
-
-            ASTnode* group = malloc(sizeof(ASTnode));
-            group->type = AST_GROUPING;
-            group->val = "groop";
-            group->children= vec_new();
-
-            while(in_range(intoks, i)) {
-                if (cur()->type == PAR_RPAREN) {
-                    consume(PAR_RPAREN);
-                    break;
-                }
-
-                s32 child_i = 0;
-                ASTnode* child = parse(intoks, i, &child_i, PAR_RPAREN);
-                for (s32 c = 0; c < (s32)child->children.len; ++c) {
-                    void* cc = vec_get(&child->children, c);
-                    vec_push(&group->children, cc);
-                }
-                //vec_push(&group->children, child);
-                i = child_i;
-            }
-
-            vec_push(&nodes, group);
-            continue;
-        } else if (tok->type == PAR_NAME) {
-            Token* nex = tok_at(intoks, nextngo());
-            Token* after;
-            switch(nex->type) {
-                case PAR_NAME:
-                    after = tok_at(intoks, i+2);
-                    if (after->type != PAR_LPAREN) {
-                        // todo: add that
-                        /*if (after->type == PAR_EQUALS) {
-                        } else {*/
-                            ASTnode* n = malloc(sizeof(ASTnode));
-                            n->children = vec_new();
-                            n->type = AST_VAR_DEF;
-                            n->val = "vardef";
-
-                            ASTnode* name = malloc(sizeof(ASTnode));
-                            name->val = cur()->name;
-                            name->type = AST_NAME;
-                            name->children = vec_new();
-                            vec_push(&n->children, name);
-                            consume(PAR_NAME);
-
-                            ASTnode* type = malloc(sizeof(ASTnode));
-                            type->val = cur()->name;
-                            type->type = AST_TYPE;
-                            type->children = vec_new();
-                            vec_push(&n->children, type);
-                            consume(PAR_NAME);
-
-                            vec_push(&nodes, n);
-                        //}
-                    } else {
-                        ASTnode* n = malloc(sizeof(ASTnode));
-                        n->children = vec_new();
-                        n->type = AST_FUNC_DEF;
-                        n->val = "weeeeeee";
-
-                        ASTnode* name = malloc(sizeof(ASTnode));
-                        name->val = cur()->name;
-                        name->type = AST_NAME;
-                        name->children = vec_new();
-                        vec_push(&n->children, name);
-                        consume(PAR_NAME);
-
-                        ASTnode* type = malloc(sizeof(ASTnode));
-                        type->val = cur()->name;
-                        type->type = AST_TYPE;
-                        type->children = vec_new();
-                        vec_push(&n->children, type);
-                        consume(PAR_NAME); 
-
-                        s32 child_i = 0;
-                        ASTnode* params = parse(intoks, i, &child_i, PAR_RPAREN);
-                        params->val = "";
-                        params->type = AST_FUNC_DEF_PARAMS;
-                        vec_push(&n->children, params);
-                        i = child_i;
-                        consume(PAR_RPAREN); 
-
-                        child_i = 0;
-                        ASTnode* scope = parse(intoks, i, &child_i, PAR_RBRAC);
-                        scope->val = "zoop scope";
-                        scope->type = AST_SCOPE;
-                        vec_push(&n->children, scope);
-                        /*for (s32 c = 0; c < (s32)scope->children.len; ++c) {
-                            void* cc = vec_get(&scope->children, c);
-                            vec_push(&n->children, cc);
-                        }*/
-                        i = child_i;
-                        consume(PAR_RBRAC);
-
-                        vec_push(&nodes, n);
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        if (start_i == i)
-            next();
-
-        if (!in_range(intoks, i))
-            break;
+ASTnode* parse_main(Parser* p) {
+    ASTnode* root = make_node(AST_ROOT, "root");
+    while (!at_end(p)) {
+        ASTnode* st = parse_statement(p);
+        if (st) vec_push(&root->children, st);
     }
-
-    *oi = i;
-    node->children = nodes;
-    return node;
+    return root;
 }
 
 
@@ -534,9 +390,14 @@ int main(int argc, char** argv) {
     }
 
     printf("\n");
+ASTnode* parse_scope(Parser* p);
+ASTnode* parse_function(Parser* p);
 
-    s32 fuck;
-    ASTnode* ast = parse(&toks, 0, &fuck, PAR_EOF);
+    Parser* p = malloc(sizeof(Parser));
+    p->toks = &toks;
+    p->pos = 0;
+
+    ASTnode* ast = parse_main(p);
     ast->type = AST_ROOT;
     ast->val = "root";
 
