@@ -137,6 +137,7 @@ typedef enum {
     AST_ROOT,
 
     AST_PREPROC_LIB,
+    AST_PREPROC_IMP,
 
     AST_FUNC_DEF,
     AST_FUNC_DEF_PARAMS,
@@ -149,6 +150,8 @@ typedef enum {
 
     AST_STRING,
 
+    AST_NAMESPACE,
+
     AST_NAME,
     AST_TYPE
 } ASTtype;
@@ -159,6 +162,7 @@ const char* astTypeNames[] = {
     "ROOT",
 
     "PREPROC-LIB",
+    "PREPROC-IMP",
 
     "FUNC DEF",
     "FUNC DEF - PARAMS",
@@ -170,6 +174,8 @@ const char* astTypeNames[] = {
     "GROUPING",
 
     "STRING",
+
+    "NAMESPACE",
 
     "NAME",
     "TYPE"
@@ -289,6 +295,7 @@ typedef struct {
 
 Token* cur(Parser* p) { return vec_get(p->toks, p->pos); }
 Token* next(Parser* p) { return vec_get(p->toks, ++p->pos); }
+Token* at_off(Parser* p, s32 off) { return vec_get(p->toks, p->pos + off); }
 b8 at_end(Parser* p) { return p->pos >= (s32)p->toks->len; }
 
 b8 match(Parser* p, TokType type) {
@@ -297,8 +304,19 @@ b8 match(Parser* p, TokType type) {
 }
 
 void expect(Parser* p, TokType type, const char* msg) {
-    ERROR_IF(cur(p)->type != type, msg);
+    if (cur(p)->type != type) {
+        printf("type check error! [%s, %s] (%d/%d)\n", tokTypeNames[cur(p)->type], cur(p)->name, p->pos, (s32)p->toks->len);
+        ERROR_IF(1, msg);
+    }
 }
+
+void expect_name(Parser* p, const char* name, const char* msg) {
+    if (strcmp(cur(p)->name, name)) {
+        printf("name check error!\n [%s, %s] (%d/%d)\n", tokTypeNames[cur(p)->type], cur(p)->name, p->pos, (s32)p->toks->len);
+        ERROR_IF(1, msg);
+    }
+}
+
 
 ASTnode* make_node(ASTtype type, char* val) {
     ASTnode* n = malloc(sizeof(ASTnode));
@@ -312,6 +330,10 @@ ASTnode* parse_expression(Parser* p);
 ASTnode* parse_group(Parser* p);
 ASTnode* parse_scope(Parser* p);
 ASTnode* parse_function(Parser* p);
+ASTnode* parse_namespace(Parser* p);
+
+ASTnode* parse_preproc_LIB(Parser* p);
+ASTnode* parse_preproc_IMP(Parser* p);
 ASTnode* parse_preproc(Parser* p);
 
 ASTnode* parse_statement(Parser* p) {
@@ -327,7 +349,7 @@ ASTnode* parse_statement(Parser* p) {
             ASTnode* var = make_node(AST_VAR_DEF, "vardef");
 
             vec_push(&var->children, make_node(AST_NAME, name->name));
-            vec_push(&var->children, make_node(AST_NAME, type->name));
+            vec_push(&var->children, make_node(AST_TYPE, type->name));
 
             if (match(p, PAR_SEMI)) return var;
             if (match(p, PAR_NEWLINE)) return var;
@@ -348,10 +370,132 @@ ASTnode* parse_statement(Parser* p) {
     if (t->type == PAR_HASH)
         return parse_preproc(p);
 
-    if (t->type == PAR_SEMI || t->type == PAR_NEWLINE)
+    if (t->type == PAR_SEMI || t->type == PAR_NEWLINE) {
+        next(p);
         return parse_statement(p);
+    }
 
     ERROR_IF(1, "unexpected token in statement!\n");
+    return NULL;
+}
+
+ASTnode* parse_function(Parser* p) {
+    Token* name = cur(p);
+    expect(p, PAR_NAME, "part 1/4 of function is not of type PAR_NAME!\n");
+
+    next(p);
+
+    Token* type = cur(p);
+    expect(p, PAR_NAME, "part 2/4 of function is not of type PAR_NAME!\n");
+
+    next(p);
+
+    ASTnode* params = parse_group(p);
+    next(p);
+
+    ASTnode* scope = parse_scope(p);
+    next(p);
+
+    ASTnode* def = make_node(AST_FUNC_DEF, "funcdef");
+    vec_push(&def->children, make_node(AST_NAME, name->name));
+    vec_push(&def->children, make_node(AST_TYPE, type->name));
+    vec_push(&def->children, params);
+    vec_push(&def->children, scope);
+
+    return def;
+}
+
+ASTnode* parse_expression(Parser* p) { return NULL; }
+ASTnode* parse_group(Parser* p) { return NULL; }
+ASTnode* parse_scope(Parser* p) { return NULL; }
+
+ASTnode* parse_namespace(Parser* p) {
+    ASTnode* ns = make_node(AST_NAMESPACE, "namespace");
+
+    while (!at_end(p)) {
+        if (cur(p)->type != PAR_NAME)
+            break;
+
+        vec_push(&ns->children, make_node(AST_NAME, cur(p)->name));
+        next(p);
+
+        if (cur(p)->type == PAR_COLON) {
+            next(p);
+            expect(p, PAR_COLON, "parsing namespace, found non ':' char after ':'!\n");
+            next(p);
+            expect(p, PAR_NAME, "parsing namespace, found token not of type PAR_NAME after '::'!\n");
+            continue;
+        }
+
+        break;
+    }
+
+    --p->pos;
+    return ns;
+}
+
+ASTnode* parse_preproc_LIB(Parser* p) {
+    expect(p, PAR_HASH, "why is the first character of a preproc (lib) not a hash? what the fuck do you expect?\n");
+    next(p);
+
+    expect(p, PAR_NAME, "part of preproc (lib) after hash is not of type PAR_NAME!\n");
+    expect_name(p, "lib", "part of preproc (lib) after hash is not of name \"lib\"!\n");
+    next(p);
+
+    expect(p, PAR_LESS, "part of preproc (lib) after \"lib\" is not of type PAR_LESS!\n");
+    next(p);
+
+    ASTnode* ns = parse_namespace(p);
+    next(p);
+
+    expect(p, PAR_GREAT, "part of preproc (lib) after namespace is not of type PAR_GREAT!\n");
+
+    ASTnode* lib = make_node(AST_PREPROC_LIB, "lib");
+    for (s32 i = 0; i < (s32)ns->children.len; ++i)
+        vec_push(&lib->children, vec_get(&ns->children, i));
+
+    return lib;
+}
+
+ASTnode* parse_preproc_IMP(Parser* p) {
+    expect(p, PAR_HASH, "why is the first character of a preproc (imp) not a hash? what the fuck do you expect?\n");
+    next(p);
+
+    expect(p, PAR_NAME, "part of preproc (imp) after hash is not of type PAR_NAME!\n");
+    expect_name(p, "imp", "part of preproc (imp) after hash is not of name \"imp\"!\n");
+    next(p);
+
+    expect(p, PAR_LESS, "part of preproc (imp) after \"imp\" is not of type PAR_LESS!\n");
+    next(p);
+
+    ASTnode* ns = parse_namespace(p);
+    next(p);
+
+    expect(p, PAR_GREAT, "part of preproc (imp) after namespace is not of type PAR_GREAT!\n");
+
+    ASTnode* imp = make_node(AST_PREPROC_IMP, "imp");
+    for (s32 i = 0; i < (s32)ns->children.len; ++i)
+        vec_push(&imp->children, vec_get(&ns->children, i));
+
+    return imp;
+}
+
+ASTnode* parse_preproc(Parser* p) {
+    expect(p, PAR_HASH, "why is the first character of a preproc not a hash? what the fuck do you expect?\n");
+    next(p);
+
+    Token* name = cur(p);
+    expect(p, PAR_NAME, "part of preproc after hash is not of type PAR_NAME!\n");
+
+    if (!strcmp(name->name, "lib")) {
+        --p->pos;
+        return parse_preproc_LIB(p);
+    } else if (!strcmp(name->name, "imp")) {
+        --p->pos;
+        return parse_preproc_IMP(p);
+    }
+
+    ERROR_IF(1, "unexpected preprocessor name \"%s\"!\n", name->name);
     return NULL;
 }
 
@@ -386,7 +530,7 @@ int main(int argc, char** argv) {
 
     for (s32 i = 0; i < (s32)toks.len; ++i) {
         Token* tok = vec_get(&toks, i);
-        printf("[%s, %s]\n", tokTypeNames[tok->type], tok->name);
+        printf("%d: [%s, %s]\n", i, tokTypeNames[tok->type], tok->name);
     }
 
     printf("\n");
