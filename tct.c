@@ -146,7 +146,7 @@ typedef enum {
     AST_VAR_DEF,
 
     AST_SCOPE,
-    AST_GROUPING,
+    AST_GROUP,
 
     AST_STRING,
 
@@ -171,7 +171,7 @@ const char* astTypeNames[] = {
     "VAR DEF",
 
     "SCOPE",
-    "GROUPING",
+    "GROUP",
 
     "STRING",
 
@@ -356,7 +356,7 @@ ASTnode* parse_statement(Parser* p) {
         }
 
         if (cur(p)->type == PAR_LPAREN) {
-            --p->pos;
+            p->pos -= 2;
             return parse_function(p);
         }
     }
@@ -393,8 +393,11 @@ ASTnode* parse_function(Parser* p) {
     ASTnode* params = parse_group(p);
     next(p);
 
-    ASTnode* scope = parse_scope(p);
-    next(p);
+    ASTnode* scope = make_node(AST_SCOPE, "scope");
+    if (cur(p)->type == PAR_LBRAC) {
+        scope = parse_scope(p);
+        next(p);
+    }
 
     ASTnode* def = make_node(AST_FUNC_DEF, "funcdef");
     vec_push(&def->children, make_node(AST_NAME, name->name));
@@ -406,8 +409,48 @@ ASTnode* parse_function(Parser* p) {
 }
 
 ASTnode* parse_expression(Parser* p) { return NULL; }
-ASTnode* parse_group(Parser* p) { return NULL; }
-ASTnode* parse_scope(Parser* p) { return NULL; }
+
+ASTnode* parse_group(Parser* p) { 
+    expect(p, PAR_LPAREN, "expected '(' at start of group parsing!\n");
+    next(p);
+
+    ASTnode* group = make_node(AST_GROUP, "group");
+    for(;;) { 
+        ASTnode* g = parse_statement(p);
+        vec_push(&group->children, g);
+
+        if (cur(p)->type == PAR_RPAREN)
+            break;
+
+        printf("parsing part of group!\n");
+    }
+
+    next(p);
+    next(p);
+
+    return group;
+}
+
+ASTnode* parse_scope(Parser* p) {
+    expect(p, PAR_LBRAC, "expected '{' at start of scope parsing!\n");
+    next(p);
+
+    ASTnode* scope = make_node(AST_SCOPE, "scope");
+    for(;;) { 
+        ASTnode* g = parse_statement(p);
+        vec_push(&scope->children, g);
+
+        if (cur(p)->type == PAR_RBRAC)
+            break;
+
+        printf("parsing part of scope!\n");
+    }
+
+    next(p);
+    next(p);
+
+    return scope;
+}
 
 ASTnode* parse_namespace(Parser* p) {
     ASTnode* ns = make_node(AST_NAMESPACE, "namespace");
@@ -449,12 +492,11 @@ ASTnode* parse_preproc_LIB(Parser* p) {
     next(p);
 
     expect(p, PAR_GREAT, "part of preproc (lib) after namespace is not of type PAR_GREAT!\n");
+    next(p);
 
     ASTnode* lib = make_node(AST_PREPROC_LIB, "lib");
     for (s32 i = 0; i < (s32)ns->children.len; ++i)
         vec_push(&lib->children, vec_get(&ns->children, i));
-
-    next(p);
 
     return lib;
 }
@@ -474,12 +516,11 @@ ASTnode* parse_preproc_IMP(Parser* p) {
     next(p);
 
     expect(p, PAR_GREAT, "part of preproc (imp) after namespace is not of type PAR_GREAT!\n");
+    next(p);
 
     ASTnode* imp = make_node(AST_PREPROC_IMP, "imp");
     for (s32 i = 0; i < (s32)ns->children.len; ++i)
         vec_push(&imp->children, vec_get(&ns->children, i));
-
-    next(p);
 
     return imp;
 }

@@ -1,1 +1,1 @@
-tcc -std=c99 -pedantic -Wall -Wextra -Werror tct.c -o tct
+tcc -std=c99 -pedantic -g -Wall -Wextra -Werror tct.c -o tct
