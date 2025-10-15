@@ -454,6 +454,8 @@ ASTnode* parse_preproc_LIB(Parser* p) {
     for (s32 i = 0; i < (s32)ns->children.len; ++i)
         vec_push(&lib->children, vec_get(&ns->children, i));
 
+    next(p);
+
     return lib;
 }
 
@@ -476,6 +478,8 @@ ASTnode* parse_preproc_IMP(Parser* p) {
     ASTnode* imp = make_node(AST_PREPROC_IMP, "imp");
     for (s32 i = 0; i < (s32)ns->children.len; ++i)
         vec_push(&imp->children, vec_get(&ns->children, i));
+
+    next(p);
 
     return imp;
 }
