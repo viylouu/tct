@@ -375,7 +375,7 @@ ASTnode* parse_statement(Parser* p) {
         return parse_statement(p);
     }
 
-    ERROR_IF(1, "unexpected token in statement!\n");
+    ERROR_IF(1, "unexpected token in statement! [%s, %s] (%d/%d)\n", tokTypeNames[cur(p)->type], cur(p)->name, p->pos, (s32)p->toks->len);
     return NULL;
 }
 
